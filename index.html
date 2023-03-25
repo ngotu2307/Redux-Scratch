@@ -7,6 +7,7 @@
     <script src="https://unpkg.com/react@17.0.2/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17.0.2/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.17.6/babel.min.js"></script>
+    <script src="https://tylermcginnis.com/goals-todos-api/index.js"></script>
 </head>
 
 <body>
@@ -23,6 +24,7 @@
         const TOGGLE_TODO = 'TOGGLE_TODO';
         const ADD_GOAL = 'ADD_GOAL';
         const REMOVE_GOAL = 'REMOVE_GOAL';
+        const RECEIVE_DATA = 'RECEIVE_DATA';
 
         function addTodoAction(todo) {
             return {
@@ -59,6 +61,14 @@
             }
         }
 
+        function receiveDataAction(todos, goals) {
+            return {
+                type: RECEIVE_DATA,
+                todos,
+                goals
+            }
+        }
+
         function todos(state = [], action) {
             switch (action.type) {
                 case ADD_TODO:
@@ -68,6 +78,8 @@
                 case TOGGLE_TODO:
                     return state.map((todo) => todo.id !== action.id ? todo :
                         Object.assign({}, todo, { complete: !todo.complete }))
+                case RECEIVE_DATA:
+                    return action.todos;
                 default:
                     return state;
             }
@@ -79,6 +91,17 @@
                     return state.concat([action.goal]);
                 case REMOVE_GOAL:
                     return state.filter((goal) => goal.id !== action.id);
+                case RECEIVE_DATA:
+                    return action.goals;
+                default:
+                    return state;
+            }
+        }
+
+        function loading(state = true, action) {
+            switch (action.type) {
+                case RECEIVE_DATA:
+                    return false
                 default:
                     return state;
             }
@@ -146,7 +169,8 @@
 
         const store = Redux.createStore(Redux.combineReducers({
             todos,
-            goals
+            goals,
+            loading
         }), Redux.applyMiddleware(checker, logger));
     </script>
 
@@ -157,7 +181,7 @@
                     {
                         props.items && props.items.map((item) => (
                             <li key={item.id}>
-                                <span 
+                                <span
                                     style={{
                                         textDecoration: item.complete ? "line-through" : "none"
                                     }}
@@ -188,10 +212,18 @@
 
             const removeItem = (todo) => {
                 props.store.dispatch(removeTodoAction(todo.id));
+                return API.deleteTodo(todo.id).catch(() => {
+                    props.store.dispatch(addTodoAction(todo));
+                    alert("An error occurred! Try again.")
+                })
             }
 
             const toggleItem = (id) => {
                 props.store.dispatch(toggleTodoAction(id));
+                return API.saveTodoToggle(id).catch(() => {
+                    props.store.dispatch(toggleTodoAction(id));
+                    alert("An error occurred! Try again.")
+                })
             }
 
             return (
@@ -221,6 +253,10 @@
 
             const removeItem = (goal) => {
                 props.store.dispatch(removeGoalAction(goal.id));
+                return API.deleteGoal(goal.id).catch(() => {
+                    props.store.dispatch(addGoalAction(goal));
+                    alert("An error occurred! Try again.")
+                })
             }
 
             return (
@@ -236,12 +272,19 @@
         const App = (props) => {
             const [value, setValue] = React.useState(0);
             React.useEffect(() => {
+                Promise.all([API.fetchTodos(), API.fetchGoals()])
+                    .then(([todos, goals]) => {
+                        props.store.dispatch(receiveDataAction(todos, goals))
+                    })
+
                 props.store.subscribe(() => {
                     setValue((value) => value + 1)
                 })
             }, [])
-            const { todos, goals } = props.store.getState();
-
+            const { todos, goals, loading } = props.store.getState();
+            if(loading === true) {
+                return <h3>Loading</h3>
+            }
             return (
                 <div>
                     <Todos todos={todos} store={props.store} />
